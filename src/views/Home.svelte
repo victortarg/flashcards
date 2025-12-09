@@ -16,31 +16,68 @@
   // Pega o nome da pasta atual
   $: currentFolder = $folders.find((f) => f.id === $activeFolderId);
 
-  // --- Controle do Modal de Criar Pasta ---
-  let showCreateFolderModal = false;
-  let newFolderName = "";
-  let inputFolderRef; // Referência para focar no input automaticamente
+  // --- Controle do Modal Genérico (Criar/Renomear) ---
+  let showModal = false;
+  let modalMode = "create_folder"; // 'create_folder', 'edit_folder', 'rename_deck'
+  let modalInputValue = "";
+  let modalTargetId = null; // ID do item sendo editado
+  let inputRef; // Referência para focar no input
 
-  function abrirModalPasta() {
-    showCreateFolderModal = true;
-    newFolderName = "";
-    // Pequeno delay para o DOM renderizar o input antes de focar
-    setTimeout(() => inputFolderRef?.focus(), 50);
+  function abrirModalCriarPasta() {
+    modalMode = "create_folder";
+    modalInputValue = "";
+    modalTargetId = null;
+    showModal = true;
+    setTimeout(() => inputRef?.focus(), 50);
   }
 
-  function fecharModalPasta() {
-    showCreateFolderModal = false;
-    newFolderName = "";
+  function abrirModalEditarPasta(folder, e) {
+    e.stopPropagation(); // Impede entrar na pasta ao clicar no editar
+    modalMode = "edit_folder";
+    modalInputValue = folder.name;
+    modalTargetId = folder.id;
+    showModal = true;
+    setTimeout(() => inputRef?.focus(), 50);
   }
 
-  function confirmarCriarPasta() {
-    if (newFolderName && newFolderName.trim()) {
+  function abrirModalRenomearDeck(deck, e) {
+    e.stopPropagation(); // Impede abrir detalhes ao clicar no editar
+    modalMode = "rename_deck";
+    modalInputValue = deck.titulo;
+    modalTargetId = deck.id;
+    showModal = true;
+    setTimeout(() => inputRef?.focus(), 50);
+  }
+
+  function fecharModal() {
+    showModal = false;
+    modalInputValue = "";
+    modalTargetId = null;
+  }
+
+  function confirmarModal() {
+    if (!modalInputValue.trim()) return;
+
+    if (modalMode === "create_folder") {
       folders.update((all) => [
         ...all,
-        { id: Date.now(), name: newFolderName.trim() },
+        { id: Date.now(), name: modalInputValue.trim() },
       ]);
-      fecharModalPasta();
+    } else if (modalMode === "edit_folder") {
+      folders.update((all) =>
+        all.map((f) =>
+          f.id === modalTargetId ? { ...f, name: modalInputValue.trim() } : f
+        )
+      );
+    } else if (modalMode === "rename_deck") {
+      decks.update((all) =>
+        all.map((d) =>
+          d.id === modalTargetId ? { ...d, titulo: modalInputValue.trim() } : d
+        )
+      );
     }
+
+    fecharModal();
   }
 
   // --- Ações de Navegação e Deleção ---
@@ -81,12 +118,14 @@
 </script>
 
 <!-- Header da Home -->
-<div class="flex flex-col sm:flex-row justify-between items-end mb-6 gap-4">
-  <div class="flex items-center gap-2">
+<div
+  class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-4"
+>
+  <div class="flex items-center gap-2 w-full sm:w-auto">
     {#if $activeFolderId && currentFolder}
       <button
         on:click={sairPasta}
-        class="p-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 transition"
+        class="p-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 transition shrink-0"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -103,16 +142,18 @@
           />
         </svg>
       </button>
-      <div>
+      <div class="overflow-hidden">
         <h2
-          class="text-2xl font-bold {$isDarkMode
+          class="text-2xl font-bold truncate {$isDarkMode
             ? 'text-white'
             : 'text-gray-900'}"
         >
           {currentFolder.name}
         </h2>
         <p
-          class="text-sm mt-1 {$isDarkMode ? 'text-gray-400' : 'text-gray-500'}"
+          class="text-sm mt-1 truncate {$isDarkMode
+            ? 'text-gray-400'
+            : 'text-gray-500'}"
         >
           Visualizando pasta
         </p>
@@ -124,7 +165,7 @@
             ? 'text-white'
             : 'text-gray-900'}"
         >
-          Seus Blocos e Pastas
+          Seus Blocos
         </h2>
         <p
           class="text-sm mt-1 {$isDarkMode ? 'text-gray-400' : 'text-gray-500'}"
@@ -136,10 +177,10 @@
   </div>
 
   <div class="flex gap-2 w-full sm:w-auto">
-    <!-- Botão Criar Pasta (Chama o Modal agora) -->
+    <!-- Botão Criar Pasta -->
     {#if !$activeFolderId}
       <button
-        on:click={abrirModalPasta}
+        on:click={abrirModalCriarPasta}
         class="flex-1 sm:flex-none border border-indigo-200 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50 transition text-sm font-bold flex items-center justify-center gap-2 {$isDarkMode
           ? 'border-gray-600 text-indigo-400 hover:bg-gray-800'
           : ''}"
@@ -158,7 +199,7 @@
             d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
           />
         </svg>
-        Nova Pasta
+        <span class="whitespace-nowrap">Nova Pasta</span>
       </button>
     {/if}
 
@@ -180,7 +221,7 @@
           d="M12 4v16m8-8H4"
         />
       </svg>
-      Novo Bloco
+      <span class="whitespace-nowrap">Novo Bloco</span>
     </button>
   </div>
 </div>
@@ -195,7 +236,7 @@
     >
       Pastas
     </h3>
-    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
       {#each $folders as folder (folder.id)}
         <div
           on:click={() => entrarPasta(folder.id)}
@@ -215,16 +256,42 @@
             />
           </svg>
           <span
-            class="font-medium text-center truncate w-full {$isDarkMode
+            class="font-medium text-center truncate w-full text-sm sm:text-base {$isDarkMode
               ? 'text-gray-200'
               : 'text-gray-700'}">{folder.name}</span
           >
 
+          <!-- Botão Editar (Esquerda) -->
           <button
-            on:click={(e) => deletarPasta(folder.id, e)}
-            class="absolute top-1 right-1 p-1 rounded-full opacity-0 group-hover:opacity-100 transition {$isDarkMode
+            on:click={(e) => abrirModalEditarPasta(folder, e)}
+            class="absolute top-1 left-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$isDarkMode
               ? 'hover:bg-gray-700 text-gray-500'
               : 'hover:bg-gray-100 text-gray-400'}"
+            title="Renomear"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+              />
+            </svg>
+          </button>
+
+          <!-- Botão Deletar (Direita) -->
+          <button
+            on:click={(e) => deletarPasta(folder.id, e)}
+            class="absolute top-1 right-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$isDarkMode
+              ? 'hover:bg-gray-700 text-gray-500'
+              : 'hover:bg-gray-100 text-gray-400'}"
+            title="Excluir"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -294,27 +361,56 @@
             >
               {deck.titulo}
             </h3>
-            <button
-              on:click={(e) => deletarDeck(deck.id, e)}
-              class="p-1 rounded transition {$isDarkMode
-                ? 'text-gray-500 hover:text-red-400 hover:bg-gray-700'
-                : 'text-gray-300 hover:text-red-500 hover:bg-red-50'}"
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                class="h-5 w-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+
+            <div class="flex gap-1">
+              <!-- Botão Renomear Deck -->
+              <button
+                on:click={(e) => abrirModalRenomearDeck(deck, e)}
+                class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$isDarkMode
+                  ? 'text-gray-500 hover:text-indigo-400 hover:bg-gray-700'
+                  : 'text-gray-300 hover:text-indigo-500 hover:bg-indigo-50'}"
+                title="Renomear"
               >
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                />
-              </svg>
-            </button>
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                  />
+                </svg>
+              </button>
+
+              <!-- Botão Deletar Deck -->
+              <button
+                on:click={(e) => deletarDeck(deck.id, e)}
+                class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$isDarkMode
+                  ? 'text-gray-500 hover:text-red-400 hover:bg-gray-700'
+                  : 'text-gray-300 hover:text-red-500 hover:bg-red-50'}"
+                title="Excluir"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-5 w-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
           <div
             class="flex items-center gap-2 text-sm {$isDarkMode
@@ -347,16 +443,14 @@
   {/if}
 </div>
 
-<!-- MODAL: Criar Nova Pasta -->
-{#if showCreateFolderModal}
+<!-- MODAL GENÉRICO: Criar/Editar -->
+{#if showModal}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
     style="background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px);"
   >
-    <!-- Fundo clicável para fechar -->
-    <div class="absolute inset-0" on:click={fecharModalPasta}></div>
+    <div class="absolute inset-0" on:click={fecharModal}></div>
 
-    <!-- Conteúdo do Modal -->
     <div
       class="w-full max-w-sm rounded-xl shadow-2xl p-6 relative z-10 transition-colors {$isDarkMode
         ? 'bg-gray-800'
@@ -367,23 +461,31 @@
           ? 'text-white'
           : 'text-gray-900'}"
       >
-        Nova Pasta
+        {#if modalMode === "create_folder"}
+          Nova Pasta
+        {:else if modalMode === "edit_folder"}
+          Renomear Pasta
+        {:else}
+          Renomear Bloco
+        {/if}
       </h3>
 
       <input
-        bind:this={inputFolderRef}
-        bind:value={newFolderName}
-        placeholder="Nome da pasta (ex: Biologia)"
+        bind:this={inputRef}
+        bind:value={modalInputValue}
+        placeholder={modalMode === "rename_deck"
+          ? "Nome do bloco"
+          : "Nome da pasta"}
         class="w-full p-3 border rounded-lg mb-6 outline-none transition focus:ring-2 focus:ring-indigo-500
           {$isDarkMode
           ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
           : 'bg-gray-50 border-gray-200 text-gray-900'}"
-        on:keydown={(e) => e.key === "Enter" && confirmarCriarPasta()}
+        on:keydown={(e) => e.key === "Enter" && confirmarModal()}
       />
 
       <div class="flex gap-3">
         <button
-          on:click={fecharModalPasta}
+          on:click={fecharModal}
           class="flex-1 py-2 font-medium rounded-lg transition {$isDarkMode
             ? 'text-gray-300 hover:bg-gray-700'
             : 'text-gray-600 hover:bg-gray-100'}"
@@ -391,11 +493,11 @@
           Cancelar
         </button>
         <button
-          on:click={confirmarCriarPasta}
-          disabled={!newFolderName.trim()}
+          on:click={confirmarModal}
+          disabled={!modalInputValue.trim()}
           class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Criar
+          {modalMode === "create_folder" ? "Criar" : "Salvar"}
         </button>
       </div>
     </div>
