@@ -3,13 +3,14 @@
   export let verso = "";
   export let imagem = null;
   export let revelado = false;
-  export let darkMode = false; // Nova prop para controlar o tema
+  export let darkMode = false; // Controlado pelo pai (Study.svelte) via store $modoEscuro
 
   const virar = () => {
     revelado = !revelado;
   };
 </script>
 
+<!-- Container do Card -->
 <div
   class="group w-full h-72 sm:h-80 [perspective:1000px] cursor-pointer"
   on:click={virar}
@@ -26,7 +27,7 @@
       class="absolute inset-0 w-full h-full rounded-xl shadow-lg border-2 flex flex-col [backface-visibility:hidden] overflow-hidden transition-colors duration-300
       {darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-indigo-100'}"
     >
-      <!-- Área de conteúdo -->
+      <!-- Área de conteúdo (Texto + Imagem) -->
       <div
         class="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center {darkMode
           ? 'scrollbar-thin-dark'

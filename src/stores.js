@@ -1,68 +1,98 @@
 import { writable } from "svelte/store";
+import { supabase } from "./lib/supabaseClient";
 
-// --- PERSISTÊNCIA DE DADOS ---
-const carregarDados = (key, defaultVal) => {
+// --- ESTADO DO USUÁRIO ---
+export const usuario = writable(null);
+
+// --- DADOS DA NUVEM (Cache local) ---
+export const baralhos = writable([]);
+export const pastas = writable([]);
+
+// --- ESTADO DA UI ---
+export const visualizacaoAtual = writable("login"); // Começa no login
+export const baralhoAtual = writable(null);
+export const idPastaAtiva = writable(null);
+export const parametrosRota = writable({ idPasta: null });
+
+// --- TEMA (Mantemos local pois é preferência de dispositivo) ---
+const temaSalvo =
+  typeof localStorage !== "undefined" && localStorage.getItem("flashmind-tema");
+export const modoEscuro = writable(temaSalvo === "escuro");
+
+modoEscuro.subscribe((ativo) => {
   if (typeof localStorage !== "undefined") {
-    const dados = localStorage.getItem(key);
-    if (dados) {
-      try {
-        return JSON.parse(dados);
-      } catch (e) {
-        // Se der erro (ex: dado antigo salvo como texto puro), retorna o padrão
-        return defaultVal;
-      }
-    }
-  }
-  return defaultVal;
-};
-
-// Decks (Blocos)
-export const decks = writable(carregarDados("flashmind-data", []));
-decks.subscribe((val) => {
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem("flashmind-data", JSON.stringify(val));
-});
-
-// Pastas
-export const folders = writable(carregarDados("flashmind-folders", []));
-folders.subscribe((val) => {
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem("flashmind-folders", JSON.stringify(val));
-});
-
-// --- ESTADO DA APLICAÇÃO ---
-export const currentView = writable("home");
-export const currentDeck = writable(null);
-
-// NOVO: Pasta Atual (Persistente)
-// Isso garante que o app lembre em qual pasta você estava
-export const activeFolderId = writable(
-  carregarDados("flashmind-active-folder", null)
-);
-activeFolderId.subscribe((val) => {
-  if (typeof localStorage !== "undefined")
-    localStorage.setItem("flashmind-active-folder", JSON.stringify(val));
-});
-
-export const routeParams = writable({ folderId: null });
-
-// Tema
-export const isDarkMode = writable(
-  carregarDados("flashmind-theme", false) === true
-);
-
-isDarkMode.subscribe((val) => {
-  if (typeof localStorage !== "undefined") {
-    localStorage.setItem("flashmind-theme", JSON.stringify(val));
-
-    if (val) document.documentElement.classList.add("dark");
+    localStorage.setItem("flashmind-tema", ativo ? "escuro" : "claro");
+    if (ativo) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }
 });
 
-// Navegação
-export const navigateTo = (view, deck = null, params = { folderId: null }) => {
-  currentDeck.set(deck);
-  routeParams.set(params);
-  currentView.set(view);
+// --- FUNÇÃO: BUSCAR DADOS DO SUPABASE ---
+export const buscarDados = async () => {
+  try {
+    // 1. Buscar Pastas
+    const { data: dadosPastas, error: erroPastas } = await supabase
+      .from("folders")
+      .select("*")
+      .order("created_at");
+
+    if (erroPastas) throw erroPastas;
+    if (dadosPastas) pastas.set(dadosPastas);
+
+    // 2. Buscar Baralhos e Cartões
+    // O select('*, cards(*)') faz um "JOIN" automático e traz os cartões dentro do baralho
+    const { data: dadosBaralhos, error: erroBaralhos } = await supabase
+      .from("decks")
+      .select("*, cards(*)")
+      .order("created_at");
+
+    if (erroBaralhos) throw erroBaralhos;
+
+    if (dadosBaralhos) {
+      // Mapeia para garantir que a propriedade se chame 'cartoes' no front-end
+      const formatados = dadosBaralhos.map((b) => ({
+        ...b,
+        cartoes: b.cards || [],
+      }));
+      baralhos.set(formatados);
+    }
+  } catch (erro) {
+    console.error("Erro ao sincronizar:", erro.message);
+  }
 };
+
+// --- NAVEGAÇÃO ---
+export const navegarPara = (
+  visualizacao,
+  baralho = null,
+  params = { idPasta: null }
+) => {
+  baralhoAtual.set(baralho);
+  parametrosRota.set(params);
+  visualizacaoAtual.set(visualizacao);
+};
+
+// --- LISTENER DE AUTENTICAÇÃO ---
+// Isso roda assim que o app abre para ver se tem alguém logado
+supabase.auth.getSession().then(({ data: { session } }) => {
+  usuario.set(session?.user ?? null);
+  if (session?.user) {
+    visualizacaoAtual.set("home");
+    buscarDados(); // Se logado, busca os dados
+  } else {
+    visualizacaoAtual.set("login");
+  }
+});
+
+// Escuta mudanças (ex: se clicar em Sair ou o token expirar)
+supabase.auth.onAuthStateChange((_event, session) => {
+  usuario.set(session?.user ?? null);
+  if (session?.user) {
+    visualizacaoAtual.set("home");
+    buscarDados();
+  } else {
+    visualizacaoAtual.set("login");
+    baralhos.set([]); // Limpa memória por segurança
+    pastas.set([]);
+  }
+});

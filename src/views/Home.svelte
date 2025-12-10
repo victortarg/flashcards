@@ -1,119 +1,140 @@
 <script>
   import {
-    decks,
-    folders,
-    activeFolderId,
-    isDarkMode,
-    navigateTo,
+    baralhos,
+    pastas,
+    idPastaAtiva,
+    modoEscuro,
+    navegarPara,
+    buscarDados,
   } from "../stores.js";
+  import { supabase } from "../lib/supabaseClient";
 
-  // Filtra os decks baseado no estado GLOBAL da pasta atual
-  $: filteredDecks = $decks.filter((d) => {
-    if ($activeFolderId) return d.folderId === $activeFolderId;
-    return !d.folderId; // Retorna decks da raiz se não houver pasta selecionada
+  // --- Filtros ---
+  // Filtra os baralhos para mostrar apenas os da pasta atual (ou da raiz)
+  $: baralhosFiltrados = $baralhos.filter((b) => {
+    if ($idPastaAtiva) return b.folder_id === $idPastaAtiva; // Nota: folder_id é o nome da coluna no banco
+    return !b.folder_id; // Raiz
   });
 
-  // Pega o nome da pasta atual
-  $: currentFolder = $folders.find((f) => f.id === $activeFolderId);
+  $: pastaAtual = $pastas.find((p) => p.id === $idPastaAtiva);
 
-  // --- Controle do Modal Genérico (Criar/Renomear) ---
-  let showModal = false;
-  let modalMode = "create_folder"; // 'create_folder', 'edit_folder', 'rename_deck'
-  let modalInputValue = "";
-  let modalTargetId = null; // ID do item sendo editado
-  let inputRef; // Referência para focar no input
+  // --- Controle do Modal (Criar/Renomear) ---
+  let mostrarModal = false;
+  let modoModal = "criar_pasta"; // 'criar_pasta', 'editar_pasta', 'renomear_baralho'
+  let valorInputModal = "";
+  let idAlvoModal = null;
+  let refInput;
 
   function abrirModalCriarPasta() {
-    modalMode = "create_folder";
-    modalInputValue = "";
-    modalTargetId = null;
-    showModal = true;
-    setTimeout(() => inputRef?.focus(), 50);
+    modoModal = "criar_pasta";
+    valorInputModal = "";
+    mostrarModal = true;
+    setTimeout(() => refInput?.focus(), 50);
   }
 
-  function abrirModalEditarPasta(folder, e) {
-    e.stopPropagation(); // Impede entrar na pasta ao clicar no editar
-    modalMode = "edit_folder";
-    modalInputValue = folder.name;
-    modalTargetId = folder.id;
-    showModal = true;
-    setTimeout(() => inputRef?.focus(), 50);
+  function abrirModalEditarPasta(pasta, e) {
+    e.stopPropagation();
+    modoModal = "editar_pasta";
+    valorInputModal = pasta.name;
+    idAlvoModal = pasta.id;
+    mostrarModal = true;
+    setTimeout(() => refInput?.focus(), 50);
   }
 
-  function abrirModalRenomearDeck(deck, e) {
-    e.stopPropagation(); // Impede abrir detalhes ao clicar no editar
-    modalMode = "rename_deck";
-    modalInputValue = deck.titulo;
-    modalTargetId = deck.id;
-    showModal = true;
-    setTimeout(() => inputRef?.focus(), 50);
+  function abrirModalRenomearBaralho(baralho, e) {
+    e.stopPropagation();
+    modoModal = "renomear_baralho";
+    valorInputModal = baralho.title; // title é coluna do banco
+    idAlvoModal = baralho.id;
+    mostrarModal = true;
+    setTimeout(() => refInput?.focus(), 50);
   }
 
   function fecharModal() {
-    showModal = false;
-    modalInputValue = "";
-    modalTargetId = null;
+    mostrarModal = false;
+    valorInputModal = "";
   }
 
-  function confirmarModal() {
-    if (!modalInputValue.trim()) return;
+  // --- Ações no Banco de Dados (Supabase) ---
 
-    if (modalMode === "create_folder") {
-      folders.update((all) => [
-        ...all,
-        { id: Date.now(), name: modalInputValue.trim() },
-      ]);
-    } else if (modalMode === "edit_folder") {
-      folders.update((all) =>
-        all.map((f) =>
-          f.id === modalTargetId ? { ...f, name: modalInputValue.trim() } : f
-        )
-      );
-    } else if (modalMode === "rename_deck") {
-      decks.update((all) =>
-        all.map((d) =>
-          d.id === modalTargetId ? { ...d, titulo: modalInputValue.trim() } : d
-        )
-      );
+  async function confirmarModal() {
+    if (!valorInputModal.trim()) return;
+    const valor = valorInputModal.trim();
+    fecharModal(); // Fecha rápido para UX
+
+    try {
+      if (modoModal === "criar_pasta") {
+        const { error } = await supabase
+          .from("folders")
+          .insert({ name: valor });
+        if (error) throw error;
+      } else if (modoModal === "editar_pasta") {
+        const { error } = await supabase
+          .from("folders")
+          .update({ name: valor })
+          .eq("id", idAlvoModal);
+        if (error) throw error;
+      } else if (modoModal === "renomear_baralho") {
+        const { error } = await supabase
+          .from("decks")
+          .update({ title: valor })
+          .eq("id", idAlvoModal);
+        if (error) throw error;
+      }
+      // Recarrega dados para atualizar a tela
+      await buscarDados();
+    } catch (erro) {
+      alert("Erro ao salvar: " + erro.message);
     }
-
-    fecharModal();
   }
 
-  // --- Ações de Navegação e Deleção ---
-
-  function entrarPasta(id) {
-    activeFolderId.set(id);
-  }
-
-  function sairPasta() {
-    activeFolderId.set(null);
-  }
-
-  function deletarPasta(id, e) {
+  async function deletarPasta(id, e) {
     e.stopPropagation();
     if (
       confirm(
-        "Deseja apagar esta pasta? Os blocos dentro dela voltarão para a tela inicial."
+        "Tem certeza? Os baralhos dentro desta pasta ficarão soltos na raiz."
       )
     ) {
-      decks.update((all) =>
-        all.map((d) => (d.folderId === id ? { ...d, folderId: null } : d))
-      );
-      folders.update((all) => all.filter((f) => f.id !== id));
-      if ($activeFolderId === id) activeFolderId.set(null);
+      try {
+        // 1. Desvincula baralhos (update folder_id = null)
+        await supabase
+          .from("decks")
+          .update({ folder_id: null })
+          .eq("folder_id", id);
+        // 2. Deleta a pasta
+        await supabase.from("folders").delete().eq("id", id);
+
+        if ($idPastaAtiva === id) idPastaAtiva.set(null);
+        buscarDados();
+      } catch (erro) {
+        alert("Erro ao deletar: " + erro.message);
+      }
     }
   }
 
-  function deletarDeck(id, e) {
+  async function deletarBaralho(id, e) {
     e.stopPropagation();
-    if (confirm("Tem certeza que deseja apagar este bloco?")) {
-      decks.update((d) => d.filter((deck) => deck.id !== id));
+    if (confirm("Apagar este baralho e todos os seus cartões?")) {
+      try {
+        // O banco está configurado com 'cascade', então deletar o deck deleta os cards automaticamente
+        await supabase.from("decks").delete().eq("id", id);
+        buscarDados();
+      } catch (erro) {
+        alert("Erro: " + erro.message);
+      }
     }
   }
 
-  function irParaCriarDeck() {
-    navigateTo("create");
+  // --- Navegação ---
+  function entrarPasta(id) {
+    idPastaAtiva.set(id);
+  }
+  function sairPasta() {
+    idPastaAtiva.set(null);
+  }
+
+  function irParaCriarBaralho() {
+    navegarPara("criar-baralho", null, { idPasta: $idPastaAtiva });
   }
 </script>
 
@@ -122,14 +143,14 @@
   class="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-6 gap-4"
 >
   <div class="flex items-center gap-2 w-full sm:w-auto">
-    {#if $activeFolderId && currentFolder}
+    {#if $idPastaAtiva && pastaAtual}
       <button
         on:click={sairPasta}
         class="p-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 transition shrink-0"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5 {$isDarkMode ? 'text-white' : 'text-gray-700'}"
+          class="h-5 w-5 {$modoEscuro ? 'text-white' : 'text-gray-700'}"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -144,14 +165,14 @@
       </button>
       <div class="overflow-hidden">
         <h2
-          class="text-2xl font-bold truncate {$isDarkMode
+          class="text-2xl font-bold truncate {$modoEscuro
             ? 'text-white'
             : 'text-gray-900'}"
         >
-          {currentFolder.name}
+          {pastaAtual.name}
         </h2>
         <p
-          class="text-sm mt-1 truncate {$isDarkMode
+          class="text-sm mt-1 truncate {$modoEscuro
             ? 'text-gray-400'
             : 'text-gray-500'}"
         >
@@ -161,14 +182,14 @@
     {:else}
       <div>
         <h2
-          class="text-2xl font-bold {$isDarkMode
+          class="text-2xl font-bold {$modoEscuro
             ? 'text-white'
             : 'text-gray-900'}"
         >
-          Seus Blocos
+          Seus Baralhos
         </h2>
         <p
-          class="text-sm mt-1 {$isDarkMode ? 'text-gray-400' : 'text-gray-500'}"
+          class="text-sm mt-1 {$modoEscuro ? 'text-gray-400' : 'text-gray-500'}"
         >
           Organize seus estudos
         </p>
@@ -177,11 +198,10 @@
   </div>
 
   <div class="flex gap-2 w-full sm:w-auto">
-    <!-- Botão Criar Pasta -->
-    {#if !$activeFolderId}
+    {#if !$idPastaAtiva}
       <button
         on:click={abrirModalCriarPasta}
-        class="flex-1 sm:flex-none border border-indigo-200 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50 transition text-sm font-bold flex items-center justify-center gap-2 {$isDarkMode
+        class="flex-1 sm:flex-none border border-indigo-200 text-indigo-600 px-4 py-2 rounded-lg hover:bg-indigo-50 transition text-sm font-bold flex items-center justify-center gap-2 {$modoEscuro
           ? 'border-gray-600 text-indigo-400 hover:bg-gray-800'
           : ''}"
       >
@@ -196,7 +216,7 @@
             stroke-linecap="round"
             stroke-linejoin="round"
             stroke-width="2"
-            d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"
+            d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 01-2 2H5a2 2 0 01-2-2z"
           />
         </svg>
         <span class="whitespace-nowrap">Nova Pasta</span>
@@ -204,7 +224,7 @@
     {/if}
 
     <button
-      on:click={irParaCriarDeck}
+      on:click={irParaCriarBaralho}
       class="flex-1 sm:flex-none bg-indigo-600 text-white px-4 py-2 rounded-lg shadow-md hover:bg-indigo-700 transition text-sm font-bold flex items-center justify-center gap-2"
     >
       <svg
@@ -221,27 +241,29 @@
           d="M12 4v16m8-8H4"
         />
       </svg>
-      <span class="whitespace-nowrap">Novo Bloco</span>
+      <span class="whitespace-nowrap">Novo Baralho</span>
     </button>
   </div>
 </div>
 
-<!-- SEÇÃO DE PASTAS -->
-{#if !$activeFolderId && $folders.length > 0}
+<!-- GRID DE PASTAS -->
+{#if !$idPastaAtiva && $pastas.length > 0}
   <div class="mb-8">
     <h3
-      class="text-sm font-bold uppercase tracking-wider mb-3 {$isDarkMode
+      class="text-sm font-bold uppercase tracking-wider mb-3 {$modoEscuro
         ? 'text-gray-500'
         : 'text-gray-400'}"
     >
       Pastas
     </h3>
     <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 sm:gap-4">
-      {#each $folders as folder (folder.id)}
+      {#each $pastas as pasta (pasta.id)}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          on:click={() => entrarPasta(folder.id)}
+          on:click={() => entrarPasta(pasta.id)}
           class="p-4 rounded-xl border flex flex-col items-center justify-center gap-2 cursor-pointer transition hover:shadow-md relative group
-          {$isDarkMode
+          {$modoEscuro
             ? 'bg-gray-800 border-gray-700 hover:border-indigo-500'
             : 'bg-white border-gray-200 hover:border-indigo-300'}"
         >
@@ -256,18 +278,16 @@
             />
           </svg>
           <span
-            class="font-medium text-center truncate w-full text-sm sm:text-base {$isDarkMode
+            class="font-medium text-center truncate w-full text-sm sm:text-base {$modoEscuro
               ? 'text-gray-200'
-              : 'text-gray-700'}">{folder.name}</span
+              : 'text-gray-700'}">{pasta.name}</span
           >
 
-          <!-- Botão Editar (Esquerda) -->
           <button
-            on:click={(e) => abrirModalEditarPasta(folder, e)}
-            class="absolute top-1 left-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$isDarkMode
+            on:click={(e) => abrirModalEditarPasta(pasta, e)}
+            class="absolute top-1 left-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$modoEscuro
               ? 'hover:bg-gray-700 text-gray-500'
               : 'hover:bg-gray-100 text-gray-400'}"
-            title="Renomear"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -275,36 +295,32 @@
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
-            >
-              <path
+              ><path
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-              />
-            </svg>
+              /></svg
+            >
           </button>
 
-          <!-- Botão Deletar (Direita) -->
           <button
-            on:click={(e) => deletarPasta(folder.id, e)}
-            class="absolute top-1 right-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$isDarkMode
+            on:click={(e) => deletarPasta(pasta.id, e)}
+            class="absolute top-1 right-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$modoEscuro
               ? 'hover:bg-gray-700 text-gray-500'
               : 'hover:bg-gray-100 text-gray-400'}"
-            title="Excluir"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               class="h-4 w-4"
               viewBox="0 0 20 20"
               fill="currentColor"
-            >
-              <path
+              ><path
                 fill-rule="evenodd"
                 d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
                 clip-rule="evenodd"
-              />
-            </svg>
+              /></svg
+            >
           </button>
         </div>
       {/each}
@@ -312,64 +328,64 @@
   </div>
 {/if}
 
-<!-- SEÇÃO DE BLOCOS -->
+<!-- GRID DE BARALHOS -->
 <div>
   <h3
-    class="text-sm font-bold uppercase tracking-wider mb-3 {$isDarkMode
+    class="text-sm font-bold uppercase tracking-wider mb-3 {$modoEscuro
       ? 'text-gray-500'
       : 'text-gray-400'}"
   >
-    {$activeFolderId && currentFolder
-      ? `Blocos em "${currentFolder.name}"`
-      : "Blocos Soltos"}
+    {$idPastaAtiva && pastaAtual
+      ? `Baralhos em "${pastaAtual.name}"`
+      : "Baralhos Soltos"}
   </h3>
 
-  {#if filteredDecks.length === 0}
+  {#if baralhosFiltrados.length === 0}
     <div
-      class="text-center py-16 rounded-xl border border-dashed transition-colors {$isDarkMode
+      class="text-center py-16 rounded-xl border border-dashed transition-colors {$modoEscuro
         ? 'bg-gray-800 border-gray-700'
         : 'bg-white border-gray-300'}"
     >
-      <p class="mb-2 {$isDarkMode ? 'text-gray-500' : 'text-gray-400'}">
-        {$activeFolderId
+      <p class="mb-2 {$modoEscuro ? 'text-gray-500' : 'text-gray-400'}">
+        {$idPastaAtiva
           ? "Esta pasta está vazia."
-          : "Nenhum bloco criado aqui."}
+          : "Nenhum baralho criado aqui."}
       </p>
       <button
-        on:click={irParaCriarDeck}
+        on:click={irParaCriarBaralho}
         class="text-indigo-500 font-medium hover:underline"
       >
-        Criar novo bloco aqui
+        Criar novo baralho aqui
       </button>
     </div>
   {:else}
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {#each filteredDecks as deck (deck.id)}
+      {#each baralhosFiltrados as baralho (baralho.id)}
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
-          on:click={() => navigateTo("details", deck)}
+          on:click={() => navegarPara("detalhes", baralho)}
           class="p-6 rounded-xl shadow-sm border transition-all cursor-pointer relative group overflow-hidden hover:shadow-md
-          {$isDarkMode
+          {$modoEscuro
             ? 'bg-gray-800 border-gray-700 hover:border-indigo-500'
             : 'bg-white border-gray-100 hover:border-indigo-100'}"
         >
-          <div class="absolute top-0 left-0 w-1.5 h-full {deck.cor}"></div>
+          <div class="absolute top-0 left-0 w-1.5 h-full {baralho.color}"></div>
           <div class="flex justify-between items-start mb-2">
             <h3
-              class="font-bold text-lg line-clamp-1 pr-2 {$isDarkMode
+              class="font-bold text-lg line-clamp-1 pr-2 {$modoEscuro
                 ? 'text-gray-100'
                 : 'text-gray-800'}"
             >
-              {deck.titulo}
+              {baralho.title}
             </h3>
 
             <div class="flex gap-1">
-              <!-- Botão Renomear Deck -->
               <button
-                on:click={(e) => abrirModalRenomearDeck(deck, e)}
-                class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$isDarkMode
+                on:click={(e) => abrirModalRenomearBaralho(baralho, e)}
+                class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$modoEscuro
                   ? 'text-gray-500 hover:text-indigo-400 hover:bg-gray-700'
                   : 'text-gray-300 hover:text-indigo-500 hover:bg-indigo-50'}"
-                title="Renomear"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -377,23 +393,19 @@
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                >
-                  <path
+                  ><path
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     stroke-width="2"
                     d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                  />
-                </svg>
+                  /></svg
+                >
               </button>
-
-              <!-- Botão Deletar Deck -->
               <button
-                on:click={(e) => deletarDeck(deck.id, e)}
-                class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$isDarkMode
+                on:click={(e) => deletarBaralho(baralho.id, e)}
+                class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$modoEscuro
                   ? 'text-gray-500 hover:text-red-400 hover:bg-gray-700'
                   : 'text-gray-300 hover:text-red-500 hover:bg-red-50'}"
-                title="Excluir"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -401,19 +413,18 @@
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
-                >
-                  <path
+                  ><path
                     stroke-linecap="round"
                     stroke-linejoin="round"
                     stroke-width="2"
                     d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                  />
-                </svg>
+                  /></svg
+                >
               </button>
             </div>
           </div>
           <div
-            class="flex items-center gap-2 text-sm {$isDarkMode
+            class="flex items-center gap-2 text-sm {$modoEscuro
               ? 'text-gray-400'
               : 'text-gray-500'}"
           >
@@ -423,18 +434,17 @@
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
-            >
-              <path
+              ><path
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 stroke-width="2"
                 d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
-              />
-            </svg>
+              /></svg
+            >
             <span
-              class="px-2 py-0.5 rounded text-xs font-medium {$isDarkMode
+              class="px-2 py-0.5 rounded text-xs font-medium {$modoEscuro
                 ? 'bg-gray-700 text-gray-300'
-                : 'bg-gray-100'}">{deck.cards.length} cards</span
+                : 'bg-gray-100'}">{baralho.cartoes?.length || 0} cartões</span
             >
           </div>
         </div>
@@ -443,41 +453,42 @@
   {/if}
 </div>
 
-<!-- MODAL GENÉRICO: Criar/Editar -->
-{#if showModal}
+<!-- MODAL GENÉRICO -->
+{#if mostrarModal}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center p-4"
     style="background-color: rgba(0,0,0,0.5); backdrop-filter: blur(4px);"
   >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="absolute inset-0" on:click={fecharModal}></div>
-
     <div
-      class="w-full max-w-sm rounded-xl shadow-2xl p-6 relative z-10 transition-colors {$isDarkMode
+      class="w-full max-w-sm rounded-xl shadow-2xl p-6 relative z-10 transition-colors {$modoEscuro
         ? 'bg-gray-800'
         : 'bg-white'}"
     >
       <h3
-        class="text-lg font-bold mb-4 text-center {$isDarkMode
+        class="text-lg font-bold mb-4 text-center {$modoEscuro
           ? 'text-white'
           : 'text-gray-900'}"
       >
-        {#if modalMode === "create_folder"}
+        {#if modoModal === "criar_pasta"}
           Nova Pasta
-        {:else if modalMode === "edit_folder"}
+        {:else if modoModal === "editar_pasta"}
           Renomear Pasta
         {:else}
-          Renomear Bloco
+          Renomear Baralho
         {/if}
       </h3>
 
       <input
-        bind:this={inputRef}
-        bind:value={modalInputValue}
-        placeholder={modalMode === "rename_deck"
-          ? "Nome do bloco"
+        bind:this={refInput}
+        bind:value={valorInputModal}
+        placeholder={modoModal === "renomear_baralho"
+          ? "Nome do baralho"
           : "Nome da pasta"}
         class="w-full p-3 border rounded-lg mb-6 outline-none transition focus:ring-2 focus:ring-indigo-500
-          {$isDarkMode
+          {$modoEscuro
           ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-400'
           : 'bg-gray-50 border-gray-200 text-gray-900'}"
         on:keydown={(e) => e.key === "Enter" && confirmarModal()}
@@ -486,18 +497,16 @@
       <div class="flex gap-3">
         <button
           on:click={fecharModal}
-          class="flex-1 py-2 font-medium rounded-lg transition {$isDarkMode
+          class="flex-1 py-2 font-medium rounded-lg transition {$modoEscuro
             ? 'text-gray-300 hover:bg-gray-700'
-            : 'text-gray-600 hover:bg-gray-100'}"
+            : 'text-gray-600 hover:bg-gray-100'}">Cancelar</button
         >
-          Cancelar
-        </button>
         <button
           on:click={confirmarModal}
-          disabled={!modalInputValue.trim()}
-          class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!valorInputModal.trim()}
+          class="flex-1 bg-indigo-600 text-white py-2 rounded-lg font-bold shadow-lg hover:bg-indigo-700 transition disabled:opacity-50"
         >
-          {modalMode === "create_folder" ? "Criar" : "Salvar"}
+          Salvar
         </button>
       </div>
     </div>
