@@ -7,19 +7,30 @@
   let carregando = false;
   let modo = "login"; // 'login' ou 'cadastro'
   let mensagem = "";
+  let tipoMensagem = ""; // 'sucesso' ou 'erro'
 
   const lidarComAuth = async () => {
     try {
       carregando = true;
       mensagem = "";
+      tipoMensagem = "";
 
       if (modo === "cadastro") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: email,
           password: senha,
         });
         if (error) throw error;
-        mensagem = "Cadastro realizado! Verifique seu email para confirmar.";
+
+        // Verifica se o login automático não ocorreu (significa que precisa confirmar email)
+        if (data?.user && !data?.session) {
+          mensagem =
+            "Cadastro realizado com sucesso! Enviamos um link de confirmação para o seu email. Por favor, verifique sua caixa de entrada (e spam) antes de entrar.";
+          tipoMensagem = "sucesso";
+        } else {
+          mensagem = "Cadastro realizado!";
+          tipoMensagem = "sucesso";
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: email,
@@ -30,6 +41,7 @@
       }
     } catch (erro) {
       mensagem = erro.error_description || erro.message;
+      tipoMensagem = "erro";
     } finally {
       carregando = false;
     }
@@ -58,15 +70,26 @@
     </div>
 
     <div class="space-y-4">
+      <!-- Mensagens de Erro ou Sucesso -->
       {#if mensagem}
         <div
-          class="p-3 rounded-lg text-sm text-center {mensagem.includes(
-            'Verifique'
-          )
-            ? 'bg-green-100 text-green-700'
-            : 'bg-red-100 text-red-700'}"
+          class="p-4 rounded-lg text-sm text-center border {tipoMensagem ===
+          'sucesso'
+            ? 'bg-green-100 text-green-800 border-green-200'
+            : 'bg-red-100 text-red-800 border-red-200'}"
         >
           {mensagem}
+        </div>
+      {/if}
+
+      <!-- Aviso Prévio: Aparece apenas no modo Cadastro e se não houver outra mensagem -->
+      {#if modo === "cadastro" && !mensagem}
+        <div
+          class="p-3 rounded-lg bg-blue-50 border border-blue-100 text-blue-700 text-xs text-center"
+        >
+          <span class="font-bold block mb-1">Nota Importante:</span>
+          Para sua segurança, você precisará confirmar seu email clicando no link
+          que enviaremos após o cadastro.
         </div>
       {/if}
 
@@ -111,7 +134,26 @@
         class="w-full py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-lg disabled:opacity-50 flex justify-center"
       >
         {#if carregando}
-          ...
+          <svg
+            class="animate-spin h-5 w-5 text-white"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+          >
+            <circle
+              class="opacity-25"
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              stroke-width="4"
+            ></circle>
+            <path
+              class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+            ></path>
+          </svg>
         {:else}
           {modo === "login" ? "Entrar" : "Cadastrar"}
         {/if}
