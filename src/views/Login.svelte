@@ -62,10 +62,10 @@
       <h1
         class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500 mb-2"
       >
-        FlashMind
+        Login
       </h1>
       <p class="text-sm {$modoEscuro ? 'text-gray-400' : 'text-gray-500'}">
-        Seus estudos em qualquer lugar.
+        Aplicação de flashcards.
       </p>
     </div>
 
