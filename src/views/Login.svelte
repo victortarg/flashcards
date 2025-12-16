@@ -20,9 +20,9 @@
           email: email,
           password: senha,
         });
+
         if (error) throw error;
 
-        // Verifica se o login automático não ocorreu (significa que precisa confirmar email)
         if (data?.user && !data?.session) {
           mensagem =
             "Cadastro realizado com sucesso! Enviamos um link de confirmação para o seu email. Por favor, verifique sua caixa de entrada (e spam) antes de entrar.";
@@ -37,7 +37,6 @@
           password: senha,
         });
         if (error) throw error;
-        // O redirecionamento é automático via stores.js
       }
     } catch (erro) {
       mensagem = erro.error_description || erro.message;
@@ -53,24 +52,25 @@
     ? 'bg-gray-900'
     : 'bg-gray-50'}"
 >
+  <!-- Card com padding responsivo (p-6 no mobile, p-8 no desktop) -->
   <div
-    class="w-full max-w-md p-8 rounded-2xl shadow-xl transition-colors duration-300 {$modoEscuro
+    class="w-full max-w-md p-6 sm:p-8 rounded-2xl shadow-xl transition-colors duration-300 {$modoEscuro
       ? 'bg-gray-800'
       : 'bg-white'}"
   >
-    <div class="text-center mb-8">
+    <div class="text-center mb-6 sm:mb-8">
+      <!-- Título responsivo (text-2xl no mobile, text-3xl no desktop) -->
       <h1
-        class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500 mb-2"
+        class="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500 mb-2"
       >
-        Login
+        FlashMind
       </h1>
       <p class="text-sm {$modoEscuro ? 'text-gray-400' : 'text-gray-500'}">
-        Aplicação de flashcards.
+        Seus estudos em qualquer lugar.
       </p>
     </div>
 
     <div class="space-y-4">
-      <!-- Mensagens de Erro ou Sucesso -->
       {#if mensagem}
         <div
           class="p-4 rounded-lg text-sm text-center border {tipoMensagem ===
@@ -82,7 +82,6 @@
         </div>
       {/if}
 
-      <!-- Aviso Prévio: Aparece apenas no modo Cadastro e se não houver outra mensagem -->
       {#if modo === "cadastro" && !mensagem}
         <div
           class="p-3 rounded-lg bg-blue-50 border border-blue-100 text-blue-700 text-xs text-center"
@@ -103,7 +102,7 @@
           type="email"
           bind:value={email}
           placeholder="seu@email.com"
-          class="w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-indigo-500 transition
+          class="w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-indigo-500 transition text-base
           {$modoEscuro
             ? 'bg-gray-700 border-gray-600 text-white'
             : 'bg-gray-50 border-gray-300 text-gray-900'}"
@@ -120,7 +119,7 @@
           type="password"
           bind:value={senha}
           placeholder="******"
-          class="w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-indigo-500 transition
+          class="w-full p-3 rounded-lg border outline-none focus:ring-2 focus:ring-indigo-500 transition text-base
           {$modoEscuro
             ? 'bg-gray-700 border-gray-600 text-white'
             : 'bg-gray-50 border-gray-300 text-gray-900'}"
@@ -131,7 +130,7 @@
       <button
         on:click={lidarComAuth}
         disabled={carregando}
-        class="w-full py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-lg disabled:opacity-50 flex justify-center"
+        class="w-full py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-lg disabled:opacity-50 flex justify-center active:scale-95 transform duration-150"
       >
         {#if carregando}
           <svg
