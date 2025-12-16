@@ -60,11 +60,6 @@
 
   <!-- Componente Flashcard -->
   <div class="w-full mb-8 px-2">
-    <!-- 
-         IMPORTANTE: Aqui fazemos a ligação entre o banco (inglês) e o componente (português)
-         Banco: front, back, image_url
-         Componente: frente, verso, imagem
-      -->
     <Flashcard
       frente={$baralhoAtual.cartoes[indiceCartao].front}
       verso={$baralhoAtual.cartoes[indiceCartao].back}

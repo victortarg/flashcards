@@ -25,7 +25,7 @@
         class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500 cursor-pointer select-none"
         on:click={() => navegarPara("home")}
       >
-        FlashMind
+        FlashCards
       </h1>
 
       <button
