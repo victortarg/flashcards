@@ -144,9 +144,12 @@
 >
   <div class="flex items-center gap-2 w-full sm:w-auto">
     {#if $idPastaAtiva && pastaAtual}
+      <!-- svelte-ignore a11y_consider_explicit_label -->
       <button
         on:click={sairPasta}
-        class="p-2 rounded-lg bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 transition shrink-0"
+        class="p-2 rounded-lg transition shrink-0 {$modoEscuro
+          ? 'bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600'
+          : 'bg-gray-200 hover:bg-gray-300'}"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -285,6 +288,7 @@
               : 'text-gray-700'}">{pasta.name}</span
           >
 
+          <!-- svelte-ignore a11y_consider_explicit_label -->
           <button
             on:click={(e) => abrirModalEditarPasta(pasta, e)}
             class="absolute top-1 left-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$modoEscuro
@@ -306,6 +310,7 @@
             >
           </button>
 
+          <!-- svelte-ignore a11y_consider_explicit_label -->
           <button
             on:click={(e) => deletarPasta(pasta.id, e)}
             class="absolute top-1 right-1 p-1 rounded-full opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition {$modoEscuro
