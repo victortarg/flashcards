@@ -1,6 +1,11 @@
 <script>
   import { supabase } from "../lib/supabaseClient";
-  import { modoEscuro } from "../stores.js";
+  import {
+    modoEscuro,
+    visualizacaoAtual,
+    usuario,
+    buscarDados,
+  } from "../stores.js";
 
   let email = "";
   let senha = "";
@@ -19,6 +24,9 @@
         const { data, error } = await supabase.auth.signUp({
           email: email,
           password: senha,
+          options: {
+            emailRedirectTo: window.location.origin,
+          },
         });
 
         if (error) throw error;
@@ -32,14 +40,17 @@
           tipoMensagem = "sucesso";
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        // --- LOGIN: CORREÇÃO APLICADA AQUI ---
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: email,
           password: senha,
         });
+
         if (error) throw error;
       }
     } catch (erro) {
-      mensagem = erro.error_description || erro.message;
+      console.error("Erro detalhado do Supabase:", erro);
+      mensagem = erro.message || "Erro desconhecido ao autenticar.";
       tipoMensagem = "erro";
     } finally {
       carregando = false;
@@ -52,14 +63,12 @@
     ? 'bg-gray-900'
     : 'bg-gray-50'}"
 >
-  <!-- Card com padding responsivo (p-6 no mobile, p-8 no desktop) -->
   <div
     class="w-full max-w-md p-6 sm:p-8 rounded-2xl shadow-xl transition-colors duration-300 {$modoEscuro
       ? 'bg-gray-800'
       : 'bg-white'}"
   >
     <div class="text-center mb-6 sm:mb-8">
-      <!-- Título responsivo (text-2xl no mobile, text-3xl no desktop) -->
       <h1
         class="text-2xl sm:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-500 to-purple-500 mb-2"
       >
@@ -71,6 +80,7 @@
     </div>
 
     <div class="space-y-4">
+      <!-- Mensagens de Erro ou Sucesso -->
       {#if mensagem}
         <div
           class="p-4 rounded-lg text-sm text-center border {tipoMensagem ===
@@ -82,6 +92,7 @@
         </div>
       {/if}
 
+      <!-- Aviso Prévio: Aparece apenas no modo Cadastro -->
       {#if modo === "cadastro" && !mensagem}
         <div
           class="p-3 rounded-lg bg-blue-50 border border-blue-100 text-blue-700 text-xs text-center"
@@ -130,7 +141,7 @@
       <button
         on:click={lidarComAuth}
         disabled={carregando}
-        class="w-full py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-lg disabled:opacity-50 flex justify-center active:scale-95 transform duration-150"
+        class="w-full py-3 rounded-lg font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-lg disabled:opacity-50 flex justify-center items-center active:scale-95 transform duration-150"
       >
         {#if carregando}
           <svg

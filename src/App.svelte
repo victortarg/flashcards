@@ -9,6 +9,7 @@
   import DetalhesBaralho from "./views/DeckDetail.svelte";
   import Estudo from "./views/Study.svelte";
   import Conclusao from "./views/Conclusao.svelte";
+  import SharedDeck from "./views/SharedDeck.svelte";
 </script>
 
 <div
@@ -16,8 +17,8 @@
     ? 'bg-gray-900 text-gray-100'
     : 'bg-gray-50 text-gray-800'} selection:bg-indigo-500 selection:text-white"
 >
-  <!-- Só mostra Header se estiver logado -->
-  {#if $usuario}
+  <!-- Só mostra Header se estiver logado E não estiver na tela de login -->
+  {#if $usuario && $visualizacaoAtual !== "login"}
     <Header />
   {/if}
 
@@ -35,6 +36,8 @@
       <Estudo />
     {:else if $visualizacaoAtual === "conclusao"}
       <Conclusao />
+    {:else if $visualizacaoAtual === "compartilhado"}
+      <SharedDeck />
     {/if}
   </div>
 </div>

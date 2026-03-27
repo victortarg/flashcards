@@ -1,4 +1,4 @@
-import { writable } from "svelte/store";
+import { writable, get } from "svelte/store";
 import { supabase } from "./lib/supabaseClient";
 
 // --- ESTADO DO USUÁRIO ---
@@ -7,6 +7,16 @@ export const usuario = writable(null);
 // --- DADOS DA NUVEM (Cache local) ---
 export const baralhos = writable([]);
 export const pastas = writable([]);
+
+// --- COMPARTILHAMENTO ---
+// Lê a URL apenas uma vez quando o app inicia
+const urlParams =
+  typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search)
+    : null;
+export const idCompartilhado = writable(
+  urlParams ? urlParams.get("share") : null,
+);
 
 // --- ESTADO DA UI ---
 export const visualizacaoAtual = writable("login"); // Começa no login
@@ -30,7 +40,6 @@ modoEscuro.subscribe((ativo) => {
 // --- FUNÇÃO: BUSCAR DADOS DO SUPABASE ---
 export const buscarDados = async () => {
   try {
-    // 1. Buscar Pastas
     const { data: dadosPastas, error: erroPastas } = await supabase
       .from("folders")
       .select("*")
@@ -39,8 +48,6 @@ export const buscarDados = async () => {
     if (erroPastas) throw erroPastas;
     if (dadosPastas) pastas.set(dadosPastas);
 
-    // 2. Buscar Baralhos e Cartões
-    // O select('*, cards(*)') faz um "JOIN" automático e traz os cartões dentro do baralho
     const { data: dadosBaralhos, error: erroBaralhos } = await supabase
       .from("decks")
       .select("*, cards(*)")
@@ -49,7 +56,6 @@ export const buscarDados = async () => {
     if (erroBaralhos) throw erroBaralhos;
 
     if (dadosBaralhos) {
-      // Mapeia para garantir que a propriedade se chame 'cartoes' no front-end
       const formatados = dadosBaralhos.map((b) => ({
         ...b,
         cartoes: b.cards || [],
@@ -65,7 +71,7 @@ export const buscarDados = async () => {
 export const navegarPara = (
   visualizacao,
   baralho = null,
-  params = { idPasta: null }
+  params = { idPasta: null },
 ) => {
   baralhoAtual.set(baralho);
   parametrosRota.set(params);
@@ -73,26 +79,33 @@ export const navegarPara = (
 };
 
 // --- LISTENER DE AUTENTICAÇÃO ---
-// Isso roda assim que o app abre para ver se tem alguém logado
 supabase.auth.getSession().then(({ data: { session } }) => {
   usuario.set(session?.user ?? null);
   if (session?.user) {
-    visualizacaoAtual.set("home");
-    buscarDados(); // Se logado, busca os dados
+    buscarDados();
+    // Redireciona para compartilhamento ou home de forma síncrona
+    if (get(idCompartilhado)) {
+      visualizacaoAtual.set("compartilhado");
+    } else {
+      visualizacaoAtual.set("home");
+    }
   } else {
     visualizacaoAtual.set("login");
   }
 });
 
-// Escuta mudanças (ex: se clicar em Sair ou o token expirar)
 supabase.auth.onAuthStateChange((_event, session) => {
   usuario.set(session?.user ?? null);
   if (session?.user) {
-    visualizacaoAtual.set("home");
     buscarDados();
+    if (get(idCompartilhado)) {
+      visualizacaoAtual.set("compartilhado");
+    } else {
+      visualizacaoAtual.set("home");
+    }
   } else {
     visualizacaoAtual.set("login");
-    baralhos.set([]); // Limpa memória por segurança
+    baralhos.set([]);
     pastas.set([]);
   }
 });

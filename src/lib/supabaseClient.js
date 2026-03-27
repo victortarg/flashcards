@@ -1,12 +1,20 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY; // Verifique se o nome bate com o .env
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim().replace(
+  /['"]/g,
+  "",
+);
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim().replace(
+  /['"]/g,
+  "",
+);
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error(
-    "Faltam as variáveis de ambiente do Supabase no arquivo .env"
+  console.error(
+    "ERRO FATAL: O ficheiro .env não contém a URL ou a Chave Anon.",
   );
+  alert("Erro de configuração do Supabase. Verifique a consola.");
 }
 
+// Cria o cliente com as credenciais devidamente limpas
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
