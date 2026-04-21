@@ -151,7 +151,8 @@
       <Flashcard
         frente={cartaoAtual.front}
         verso={cartaoAtual.back}
-        imagem={cartaoAtual.image_url}
+        imagemFrente={cartaoAtual.image_url}
+        imagemVerso={cartaoAtual.image_back_url}
         bind:revelado={cartaoRevelado}
         darkMode={$modoEscuro}
       />
