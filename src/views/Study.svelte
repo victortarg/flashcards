@@ -1,26 +1,94 @@
 <script>
-  import { baralhoAtual, modoEscuro, navegarPara } from "../stores.js";
+  import {
+    baralhoAtual,
+    modoEscuro,
+    navegarPara,
+    buscarDados,
+  } from "../stores.js";
   import Flashcard from "../components/Flashcard.svelte";
+  import { supabase } from "../lib/supabaseClient";
+  import { calcularProximaRevisao } from "../lib/srs.js";
 
-  let indiceCartao = 0;
+  // --- Lógica de Fila de Estudo ---
+  let filaDeEstudo = [];
+  let cartaoAtual = null;
   let cartaoRevelado = false;
+  let carregando = false;
+  let finalizado = false;
 
-  // Se não tiver baralho selecionado, volta pra home por segurança
-  if (!$baralhoAtual) navegarPara("home");
+  // Variável para controlar se estamos no modo "Revisão Forçada"
+  let revisaoForcada = false;
 
-  function proximoCartao() {
-    if (indiceCartao < $baralhoAtual.cartoes.length - 1) {
-      cartaoRevelado = false;
-      setTimeout(() => indiceCartao++, 150);
+  // Função para inicializar a fila
+  function inicializarFila(forcarTudo = false) {
+    if (!$baralhoAtual) {
+      navegarPara("home");
+      return;
+    }
+
+    const hoje = new Date();
+
+    if (forcarTudo) {
+      // Pega TODOS os cartões, independente da data
+      filaDeEstudo = [...$baralhoAtual.cartoes];
+      revisaoForcada = true;
     } else {
-      navegarPara("conclusao", $baralhoAtual);
+      revisaoForcada = false;
+      // Filtra apenas os vencidos ou novos
+      filaDeEstudo = $baralhoAtual.cartoes.filter((c) => {
+        if (!c.next_review) return true; // Se não tem data, é novo
+        return new Date(c.next_review) <= hoje;
+      });
+    }
+
+    if (filaDeEstudo.length > 0) {
+      cartaoAtual = filaDeEstudo[0];
+      finalizado = false;
+    } else {
+      finalizado = true; // Nada para estudar hoje
     }
   }
 
-  function cartaoAnterior() {
-    if (indiceCartao > 0) {
-      cartaoRevelado = false;
-      setTimeout(() => indiceCartao--, 150);
+  // Roda a inicialização padrão ao abrir
+  inicializarFila();
+
+  async function processarResposta(qualidade) {
+    if (!cartaoAtual || carregando) return;
+    carregando = true;
+
+    try {
+      // SÓ CALCULA E SALVA NO BANCO SE NÃO FOR REVISÃO FORÇADA
+      if (!revisaoForcada) {
+        // 1. Calcular novos dados SRS
+        const atualizacao = calcularProximaRevisao(cartaoAtual, qualidade);
+
+        // 2. Salvar no Supabase
+        const { error } = await supabase
+          .from("cards")
+          .update(atualizacao)
+          .eq("id", cartaoAtual.id);
+
+        if (error) throw error;
+      }
+
+      // 3. Passar para o próximo (Comum para ambos os modos)
+      filaDeEstudo.shift(); // Remove o primeiro da fila
+
+      if (filaDeEstudo.length > 0) {
+        cartaoAtual = filaDeEstudo[0];
+        cartaoRevelado = false;
+      } else {
+        // Acabou a fila
+        // Se foi revisão real, atualiza os dados globais para refletir as novas datas
+        if (!revisaoForcada) {
+          await buscarDados();
+        }
+        navegarPara("conclusao", $baralhoAtual);
+      }
+    } catch (erro) {
+      alert("Erro ao salvar progresso: " + erro.message);
+    } finally {
+      carregando = false;
     }
   }
 </script>
@@ -28,111 +96,147 @@
 <div
   class="flex flex-col items-center justify-center h-full pt-4 max-w-xl mx-auto"
 >
-  <!-- Barra de Progresso -->
-  <div class="w-full flex items-center gap-3 mb-6">
-    <span
-      class="text-xs font-bold w-8 text-right {$modoEscuro
-        ? 'text-indigo-400'
-        : 'text-indigo-600'}"
-    >
-      {Math.round(((indiceCartao + 1) / $baralhoAtual.cartoes.length) * 100)}%
-    </span>
-    <div
-      class="flex-1 h-2 rounded-full overflow-hidden {$modoEscuro
-        ? 'bg-gray-700'
-        : 'bg-gray-200'}"
-    >
-      <div
-        class="bg-indigo-500 h-full transition-all duration-300 ease-out"
-        style="width: {((indiceCartao + 1) / $baralhoAtual.cartoes.length) *
-          100}%"
-      ></div>
-    </div>
-  </div>
-
-  <p
-    class="text-xs mb-4 font-bold uppercase tracking-widest flex items-center gap-2 {$modoEscuro
-      ? 'text-gray-500'
-      : 'text-gray-400'}"
-  >
-    Cartão {indiceCartao + 1} de {$baralhoAtual.cartoes.length}
-  </p>
-
-  <!-- Componente Flashcard -->
-  <div class="w-full mb-8 px-2">
-    <Flashcard
-      frente={$baralhoAtual.cartoes[indiceCartao].front}
-      verso={$baralhoAtual.cartoes[indiceCartao].back}
-      imagem={$baralhoAtual.cartoes[indiceCartao].image_url}
-      bind:revelado={cartaoRevelado}
-      darkMode={$modoEscuro}
-    />
-  </div>
-
-  <!-- Botões de Controle -->
-  <div class="flex gap-4 w-full px-2">
-    <button
-      on:click={cartaoAnterior}
-      disabled={indiceCartao === 0}
-      class="flex-1 py-4 rounded-xl font-bold border transition shadow-sm flex items-center justify-center gap-2
-          {$modoEscuro
-        ? 'bg-gray-800 border-gray-700 text-gray-300 hover:bg-gray-700 disabled:opacity-30'
-        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40'}"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        class="h-5 w-5"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
+  {#if finalizado}
+    <!-- TELA DE NADA PARA ESTUDAR -->
+    <div class="text-center py-12 animate-fade-in">
+      <div class="text-6xl mb-4">🎉</div>
+      <h2
+        class="text-2xl font-bold mb-2 {$modoEscuro
+          ? 'text-white'
+          : 'text-gray-800'}"
       >
-        <path
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          stroke-width="2"
-          d="M15 19l-7-7 7-7"
-        />
-      </svg>
-      Anterior
-    </button>
+        Tudo em dia!
+      </h2>
+      <p class="text-lg mb-8 {$modoEscuro ? 'text-gray-400' : 'text-gray-600'}">
+        Você não tem cartões pendentes para revisar neste baralho agora.
+      </p>
 
-    <button
-      on:click={proximoCartao}
-      class="flex-1 py-4 rounded-xl font-bold bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition transform active:scale-95 flex items-center justify-center gap-2"
+      <div class="flex flex-col gap-3 max-w-xs mx-auto">
+        <button
+          on:click={() => navegarPara("home")}
+          class="px-6 py-3 rounded-xl font-bold bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition"
+        >
+          Voltar ao Início
+        </button>
+
+        <!-- Botão para forçar revisão -->
+        <button
+          on:click={() => inicializarFila(true)}
+          class="px-6 py-3 rounded-xl font-medium border-2 border-indigo-100 text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 transition {$modoEscuro
+            ? 'border-gray-700 text-indigo-400 hover:bg-gray-800'
+            : ''}"
+        >
+          Revisar Tudo Mesmo Assim
+        </button>
+      </div>
+    </div>
+  {:else if cartaoAtual}
+    <!-- MODO ESTUDO ATIVO -->
+
+    <!-- Barra de Progresso (Quantos faltam na fila de hoje) -->
+    <div
+      class="w-full flex justify-between items-center mb-6 px-2 text-xs font-bold uppercase tracking-widest {$modoEscuro
+        ? 'text-gray-500'
+        : 'text-gray-400'}"
     >
-      {#if indiceCartao === $baralhoAtual.cartoes.length - 1}
-        Concluir
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
+      <span>Pendentes: {filaDeEstudo.length}</span>
+      <span
+        >Baralho: {$baralhoAtual.title}
+        {revisaoForcada ? "(Treino Livre)" : ""}</span
+      >
+    </div>
+
+    <!-- Componente Flashcard -->
+    <div class="w-full mb-8 px-2">
+      <Flashcard
+        frente={cartaoAtual.front}
+        verso={cartaoAtual.back}
+        imagemFrente={cartaoAtual.image_url}
+        imagemVerso={cartaoAtual.image_back_url}
+        bind:revelado={cartaoRevelado}
+        darkMode={$modoEscuro}
+      />
+    </div>
+
+    <!-- Controles -->
+    <div class="w-full px-2 min-h-[80px]">
+      {#if !cartaoRevelado}
+        <!-- Botão VER RESPOSTA -->
+        <button
+          on:click={() => (cartaoRevelado = true)}
+          class="w-full py-4 rounded-xl font-bold bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition transform active:scale-95"
         >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
+          Ver Resposta
+        </button>
       {:else}
-        Próximo
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-5 w-5"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M9 5l7 7-7 7"
-          />
-        </svg>
+        <!-- Botões de Classificação SRS -->
+        <div class="grid grid-cols-4 gap-2">
+          <!-- ERREI (0) -->
+          <button
+            on:click={() => processarResposta(0)}
+            disabled={carregando}
+            class="py-3 rounded-lg font-bold text-sm bg-red-100 text-red-700 hover:bg-red-200 border border-red-200 transition flex flex-col items-center gap-1 disabled:opacity-50"
+          >
+            <span>Errei</span>
+            {#if !revisaoForcada}
+              <span class="text-[10px] opacity-75 font-normal">Reiniciar</span>
+            {/if}
+          </button>
+
+          <!-- DIFÍCIL (1) -->
+          <button
+            on:click={() => processarResposta(1)}
+            disabled={carregando}
+            class="py-3 rounded-lg font-bold text-sm bg-orange-100 text-orange-700 hover:bg-orange-200 border border-orange-200 transition flex flex-col items-center gap-1 disabled:opacity-50"
+          >
+            <span>Difícil</span>
+            {#if !revisaoForcada}
+              <span class="text-[10px] opacity-75 font-normal">Rever breve</span
+              >
+            {/if}
+          </button>
+
+          <!-- BOM (2) -->
+          <button
+            on:click={() => processarResposta(2)}
+            disabled={carregando}
+            class="py-3 rounded-lg font-bold text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 border border-blue-200 transition flex flex-col items-center gap-1 disabled:opacity-50"
+          >
+            <span>Bom</span>
+            {#if !revisaoForcada}
+              <span class="text-[10px] opacity-75 font-normal">padrão</span>
+            {/if}
+          </button>
+
+          <!-- FÁCIL (3) -->
+          <button
+            on:click={() => processarResposta(3)}
+            disabled={carregando}
+            class="py-3 rounded-lg font-bold text-sm bg-green-100 text-green-700 hover:bg-green-200 border border-green-200 transition flex flex-col items-center gap-1 disabled:opacity-50"
+          >
+            <span>Fácil</span>
+            {#if !revisaoForcada}
+              <span class="text-[10px] opacity-75 font-normal">+ tempo</span>
+            {/if}
+          </button>
+        </div>
       {/if}
-    </button>
-  </div>
+    </div>
+  {/if}
 </div>
+
+<style>
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+</style>

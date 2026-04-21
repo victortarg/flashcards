@@ -2,19 +2,39 @@ import { writable } from "svelte/store";
 import { supabase } from "./lib/supabaseClient";
 
 // --- ESTADO DO USUÁRIO ---
+/** @type {import('svelte/store').Writable<any>} */
 export const usuario = writable(null);
 
-// --- DADOS DA NUVEM (Cache local) ---
+// --- DADOS DA NUVEM ---
+/** @type {import('svelte/store').Writable<any[]>} */
 export const baralhos = writable([]);
+
+/** @type {import('svelte/store').Writable<any[]>} */
 export const pastas = writable([]);
 
+// --- COMPARTILHAMENTO ---
+// Lê a URL apenas uma vez quando o app inicia
+const urlParams =
+  typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search)
+    : null;
+const shareId = urlParams ? urlParams.get("share") : null;
+export const idCompartilhado = writable(shareId);
+
 // --- ESTADO DA UI ---
-export const visualizacaoAtual = writable("login"); // Começa no login
+/** @type {import('svelte/store').Writable<string>} */
+export const visualizacaoAtual = writable("login");
+
+/** @type {import('svelte/store').Writable<any>} */
 export const baralhoAtual = writable(null);
+
+/** @type {import('svelte/store').Writable<any>} */
 export const idPastaAtiva = writable(null);
+
+/** @type {import('svelte/store').Writable<any>} */
 export const parametrosRota = writable({ idPasta: null });
 
-// --- TEMA (Mantemos local pois é preferência de dispositivo) ---
+// --- TEMA ---
 const temaSalvo =
   typeof localStorage !== "undefined" && localStorage.getItem("flashmind-tema");
 export const modoEscuro = writable(temaSalvo === "escuro");
@@ -27,10 +47,9 @@ modoEscuro.subscribe((ativo) => {
   }
 });
 
-// --- FUNÇÃO: BUSCAR DADOS DO SUPABASE ---
+// --- BUSCAR DADOS DO SUPABASE ---
 export const buscarDados = async () => {
   try {
-    // 1. Buscar Pastas
     const { data: dadosPastas, error: erroPastas } = await supabase
       .from("folders")
       .select("*")
@@ -39,8 +58,6 @@ export const buscarDados = async () => {
     if (erroPastas) throw erroPastas;
     if (dadosPastas) pastas.set(dadosPastas);
 
-    // 2. Buscar Baralhos e Cartões
-    // O select('*, cards(*)') faz um "JOIN" automático e traz os cartões dentro do baralho
     const { data: dadosBaralhos, error: erroBaralhos } = await supabase
       .from("decks")
       .select("*, cards(*)")
@@ -49,7 +66,6 @@ export const buscarDados = async () => {
     if (erroBaralhos) throw erroBaralhos;
 
     if (dadosBaralhos) {
-      // Mapeia para garantir que a propriedade se chame 'cartoes' no front-end
       const formatados = dadosBaralhos.map((b) => ({
         ...b,
         cartoes: b.cards || [],
@@ -57,15 +73,25 @@ export const buscarDados = async () => {
       baralhos.set(formatados);
     }
   } catch (erro) {
-    console.error("Erro ao sincronizar:", erro.message);
+    // Solução para o erro 'erro is of type unknown'
+    if (erro instanceof Error) {
+      console.error("Erro ao sincronizar:", erro.message);
+    } else {
+      console.error("Erro ao sincronizar:", erro);
+    }
   }
 };
 
 // --- NAVEGAÇÃO ---
+/**
+ * @param {string} visualizacao
+ * @param {any} baralho
+ * @param {any} params
+ */
 export const navegarPara = (
   visualizacao,
   baralho = null,
-  params = { idPasta: null }
+  params = { idPasta: null },
 ) => {
   baralhoAtual.set(baralho);
   parametrosRota.set(params);
@@ -73,26 +99,35 @@ export const navegarPara = (
 };
 
 // --- LISTENER DE AUTENTICAÇÃO ---
-// Isso roda assim que o app abre para ver se tem alguém logado
+let telaAtual = "login";
+visualizacaoAtual.subscribe((valor) => {
+  telaAtual = valor;
+});
+
 supabase.auth.getSession().then(({ data: { session } }) => {
   usuario.set(session?.user ?? null);
   if (session?.user) {
-    visualizacaoAtual.set("home");
-    buscarDados(); // Se logado, busca os dados
+    buscarDados();
+    if (telaAtual === "login") {
+      visualizacaoAtual.set(shareId ? "compartilhado" : "home");
+    }
   } else {
     visualizacaoAtual.set("login");
   }
 });
 
-// Escuta mudanças (ex: se clicar em Sair ou o token expirar)
-supabase.auth.onAuthStateChange((_event, session) => {
+supabase.auth.onAuthStateChange((event, session) => {
   usuario.set(session?.user ?? null);
   if (session?.user) {
-    visualizacaoAtual.set("home");
     buscarDados();
+    if (event === "INITIAL_SESSION" || event === "SIGNED_IN") {
+      if (telaAtual === "login") {
+        visualizacaoAtual.set(shareId ? "compartilhado" : "home");
+      }
+    }
   } else {
     visualizacaoAtual.set("login");
-    baralhos.set([]); // Limpa memória por segurança
+    baralhos.set([]);
     pastas.set([]);
   }
 });

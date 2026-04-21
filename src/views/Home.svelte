@@ -92,7 +92,7 @@
     e.stopPropagation();
     if (
       confirm(
-        "Tem certeza? Os baralhos dentro desta pasta ficarão soltos na raiz."
+        "Tem certeza? Os baralhos dentro desta pasta ficarão soltos na raiz.",
       )
     ) {
       try {
@@ -388,6 +388,7 @@
             </h3>
 
             <div class="flex gap-1">
+              <!-- svelte-ignore a11y_consider_explicit_label -->
               <button
                 on:click={(e) => abrirModalRenomearBaralho(baralho, e)}
                 class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$modoEscuro
@@ -408,6 +409,7 @@
                   /></svg
                 >
               </button>
+              <!-- svelte-ignore a11y_consider_explicit_label -->
               <button
                 on:click={(e) => deletarBaralho(baralho.id, e)}
                 class="p-1 rounded transition opacity-100 sm:opacity-0 sm:group-hover:opacity-100 {$modoEscuro
