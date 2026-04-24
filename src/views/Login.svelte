@@ -10,10 +10,10 @@
   let email = "";
   let senha = "";
   let carregando = false;
-  let modo = "login"; // 'login' ou 'cadastro'
+  let modo = "login";
   let mensagem = "";
-  let tipoMensagem = ""; // 'sucesso' ou 'erro'
-  let mostrarSenha = false; // Controle de exibição da senha
+  let tipoMensagem = "";
+  let mostrarSenha = false;
 
   const lidarComAuth = async () => {
     try {
@@ -34,7 +34,7 @@
 
         if (data?.user && !data?.session) {
           mensagem =
-            "Cadastro realizado com sucesso! Enviamos um link de confirmação para o seu email. Por favor, verifique sua caixa de entrada (e spam) antes de entrar.";
+            "Cadastro realizado com sucesso! Verifique seu email para confirmar.";
           tipoMensagem = "sucesso";
         } else {
           mensagem = "Cadastro realizado!";
@@ -53,6 +53,26 @@
       mensagem = erro.message || "Erro desconhecido ao autenticar.";
       tipoMensagem = "erro";
     } finally {
+      carregando = false;
+    }
+  };
+
+  const lidarComGoogle = async () => {
+    try {
+      carregando = true;
+      mensagem = "";
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: window.location.origin,
+        },
+      });
+
+      if (error) throw error;
+    } catch (erro) {
+      mensagem = "Erro ao conectar com Google: " + erro.message;
+      tipoMensagem = "erro";
       carregando = false;
     }
   };
@@ -94,6 +114,58 @@
           {mensagem}
         </div>
       {/if}
+
+      <button
+        on:click={lidarComGoogle}
+        disabled={carregando}
+        class="w-full py-3 px-4 rounded-lg font-medium border flex items-center justify-center gap-3 transition shadow-sm hover:shadow-md disabled:opacity-50 {$modoEscuro
+          ? 'bg-gray-700 border-gray-600 text-white hover:bg-gray-600'
+          : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 48 48"
+          width="20px"
+          height="20px"
+        >
+          <path
+            fill="#FFC107"
+            d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"
+          />
+          <path
+            fill="#FF3D00"
+            d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"
+          />
+          <path
+            fill="#4CAF50"
+            d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"
+          />
+          <path
+            fill="#1976D2"
+            d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571c0.001-0.001,0.002-0.001,0.003-0.002l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"
+          />
+        </svg>
+        Entrar com Google
+      </button>
+
+      <div class="relative py-2">
+        <div class="absolute inset-0 flex items-center">
+          <div
+            class="w-full border-t {$modoEscuro
+              ? 'border-gray-600'
+              : 'border-gray-300'}"
+          ></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span
+            class="px-2 {$modoEscuro
+              ? 'bg-gray-800 text-gray-400'
+              : 'bg-white text-gray-500'}"
+          >
+            ou continue com email
+          </span>
+        </div>
+      </div>
 
       {#if modo === "cadastro" && !mensagem}
         <div
@@ -226,8 +298,8 @@
             : 'text-indigo-600'}"
         >
           {modo === "login"
-            ? "Não tem conta? Cadastre-se"
-            : "Já tem conta? Faça login"}
+            ? "Não tem conta? Cadastre-se com email"
+            : "Já tem conta? Faça login com email"}
         </button>
       </div>
     </div>
