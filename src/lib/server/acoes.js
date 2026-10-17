@@ -1,6 +1,7 @@
 import { error, fail, redirect } from "@sveltejs/kit";
-import { CORES } from "#lib/cores.js";
-import { apagarImagens } from "./imagens.js";
+import { CORES, corAleatoria } from "#lib/cores.js";
+import { ErroXml, LIMITE_ARQUIVO, lerXml } from "#lib/xml-cartoes.js";
+import { apagarImagens, resolverImagemImportada } from "./imagens.js";
 import { caminhoSeguro } from "./redirecionar.js";
 
 /**
@@ -10,6 +11,23 @@ import { caminhoSeguro } from "./redirecionar.js";
  */
 export function texto(dados, campo, limite = 120) {
   return String(dados.get(campo) ?? "").trim().slice(0, limite);
+}
+
+/**
+ * Só aceita uma pasta que seja do próprio usuário; qualquer outra vira "sem pasta".
+ * @param {App.Locals} locals
+ * @param {string} idUsuario
+ * @param {string} idPasta
+ */
+async function pastaDoUsuario(locals, idUsuario, idPasta) {
+  if (!idPasta) return null;
+  const { data } = await locals.supabase
+    .from("folders")
+    .select("id")
+    .eq("id", idPasta)
+    .eq("user_id", idUsuario)
+    .maybeSingle();
+  return data?.id ?? null;
 }
 
 /** @param {App.Locals} locals */
@@ -85,7 +103,7 @@ export const acoesBiblioteca = {
 
     const corEscolhida = texto(dados, "cor");
     const cor = CORES.some((c) => c.chave === corEscolhida) ? corEscolhida : CORES[3].chave;
-    const idPasta = texto(dados, "idPasta") || null;
+    const idPasta = await pastaDoUsuario(locals, usuario.id, texto(dados, "idPasta"));
 
     const { data, error: erro } = await locals.supabase
       .from("decks")
@@ -123,7 +141,7 @@ export const acoesBiblioteca = {
 
     const { error: erro } = await locals.supabase
       .from("decks")
-      .update({ folder_id: texto(dados, "idPasta") || null })
+      .update({ folder_id: await pastaDoUsuario(locals, usuario.id, texto(dados, "idPasta")) })
       .eq("id", texto(dados, "id"))
       .eq("user_id", usuario.id);
     if (erro) return fail(500, { erro: "Não foi possível mover o baralho." });
@@ -157,5 +175,68 @@ export const acoesBiblioteca = {
     const destino = texto(dados, "destino", 300);
     if (destino) redirect(303, caminhoSeguro(destino));
     return { ok: true };
+  },
+
+  importarXml: async ({ request, locals }) => {
+    const usuario = exigirUsuario(locals);
+    const { supabase } = locals;
+    const dados = await request.formData();
+    const arquivo = dados.get("arquivo");
+
+    if (!(arquivo instanceof Blob) || arquivo.size === 0) return fail(400, { erro: "Escolha um arquivo .xml." });
+    if (arquivo.size > LIMITE_ARQUIVO) return fail(400, { erro: "O arquivo passou de 4 MB." });
+
+    let baralhos;
+    try {
+      baralhos = lerXml(await arquivo.text());
+    } catch (erroLeitura) {
+      if (erroLeitura instanceof ErroXml) return fail(400, { erro: erroLeitura.message });
+      throw erroLeitura;
+    }
+
+    const idPasta = await pastaDoUsuario(locals, usuario.id, texto(dados, "idPasta"));
+    /** @type {string[]} */
+    const criados = [];
+
+    for (const baralho of baralhos) {
+      if (baralho.cartoes.length === 0) continue;
+
+      const { data: novo, error: erroBaralho } = await supabase
+        .from("decks")
+        .insert({ title: baralho.titulo, color: corAleatoria(), folder_id: idPasta, user_id: usuario.id })
+        .select("id")
+        .single();
+      if (erroBaralho) return fail(500, { erro: "Não foi possível criar o baralho importado." });
+
+      // Imagens em lotes pequenos, para não abrir dezenas de envios de uma vez.
+      const registros = [];
+      for (let i = 0; i < baralho.cartoes.length; i += 4) {
+        const lote = baralho.cartoes.slice(i, i + 4);
+        registros.push(
+          ...(await Promise.all(
+            lote.map(async (cartao) => ({
+              front: cartao.frente,
+              back: cartao.verso,
+              image_url: await resolverImagemImportada(supabase, usuario.id, cartao.imagemFrente),
+              image_back_url: await resolverImagemImportada(supabase, usuario.id, cartao.imagemVerso),
+              deck_id: novo.id,
+              user_id: usuario.id,
+            })),
+          )),
+        );
+      }
+
+      for (let i = 0; i < registros.length; i += 500) {
+        const { error: erroCartoes } = await supabase.from("cards").insert(registros.slice(i, i + 500));
+        if (erroCartoes) {
+          await supabase.from("decks").delete().eq("id", novo.id);
+          return fail(500, { erro: `Não foi possível salvar os cartões de "${baralho.titulo}".` });
+        }
+      }
+      criados.push(novo.id);
+    }
+
+    if (criados.length === 1) redirect(303, `/baralhos/${criados[0]}`);
+    return { importados: criados.length };
   },
 };

@@ -1,3 +1,5 @@
+import { VITE_SUPABASE_URL } from "$app/env/private";
+
 export const BUCKET = "card-images";
 
 const TIPOS = {
@@ -83,6 +85,10 @@ export async function apagarImagens(supabase, idUsuario, urls) {
  */
 export async function copiarImagem(supabase, idUsuario, url) {
   if (!url) return null;
+  // Só buscamos imagens do nosso Storage ou embutidas; um link externo num
+  // cartão compartilhado nunca deve fazer o servidor acessar outro endereço.
+  const doStorage = Boolean(VITE_SUPABASE_URL) && url.startsWith(`${VITE_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`);
+  if (!doStorage && !url.startsWith("data:")) return url;
 
   try {
     const resposta = await fetch(url);
@@ -92,4 +98,33 @@ export async function copiarImagem(supabase, idUsuario, url) {
     console.error("Erro ao copiar imagem:", erro);
     return url;
   }
+}
+
+/**
+ * Imagem que veio num arquivo importado. Embutidas (data:) são enviadas para
+ * o Storage; as do nosso próprio Storage são copiadas para a pasta de quem
+ * importa. Outros links https ficam como estão: o servidor nunca busca URLs
+ * de terceiros, só o navegador de quem estuda.
+ * @param {import('@supabase/supabase-js').SupabaseClient} supabase
+ * @param {string} idUsuario
+ * @param {string | null} src
+ */
+export async function resolverImagemImportada(supabase, idUsuario, src) {
+  if (!src) return null;
+
+  if (src.startsWith("data:")) {
+    try {
+      const [cabecalho, base64] = src.split(",");
+      const tipo = cabecalho.match(/^data:(.*?);base64$/)?.[1] ?? "";
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      return await enviarImagem(supabase, idUsuario, new Blob([bytes], { type: tipo }));
+    } catch {
+      return null;
+    }
+  }
+
+  const prefixo = `${VITE_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/`;
+  if (VITE_SUPABASE_URL && src.startsWith(prefixo)) return copiarImagem(supabase, idUsuario, src);
+
+  return /^https:\/\//i.test(src) ? src : null;
 }

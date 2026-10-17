@@ -1,5 +1,6 @@
 <script>
   import DotsThreeIcon from "phosphor-svelte/lib/DotsThreeIcon";
+  import FileArrowUpIcon from "phosphor-svelte/lib/FileArrowUpIcon";
   import FolderSimpleIcon from "phosphor-svelte/lib/FolderSimpleIcon";
   import PencilSimpleIcon from "phosphor-svelte/lib/PencilSimpleIcon";
   import PlusIcon from "phosphor-svelte/lib/PlusIcon";
@@ -28,6 +29,7 @@
 
   export const novoBaralho = () => dialogosBaralho.novo(idPasta);
   export const novaPasta = () => dialogosPasta.criar();
+  export const importarXml = () => dialogosBaralho.importar(idPasta);
 
   /** @param {string} id */
   function resumoPasta(id) {
@@ -105,9 +107,14 @@
             ? "Crie um baralho aqui ou mova um existente pelo menu dele."
             : "Um baralho reúne os cartões de um assunto. Depois é só adicionar perguntas e respostas."}
         </p>
-        <button type="button" class="btn btn-primario mt-5" onclick={novoBaralho}>
-          <PlusIcon size={16} weight="bold" /> Novo baralho
-        </button>
+        <div class="mt-5 flex flex-wrap gap-2">
+          <button type="button" class="btn btn-primario" onclick={novoBaralho}>
+            <PlusIcon size={16} weight="bold" /> Novo baralho
+          </button>
+          <button type="button" class="btn btn-secundario" onclick={importarXml}>
+            <FileArrowUpIcon size={17} /> Importar XML
+          </button>
+        </div>
       </div>
     </div>
   {:else}

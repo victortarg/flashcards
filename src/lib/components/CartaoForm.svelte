@@ -174,7 +174,7 @@
         id="frente-{original?.id ?? 'novo'}"
         name="frente"
         rows="3"
-        maxlength="2000"
+        maxlength="10000"
         placeholder="A pergunta, termo ou imagem"
         class="entrada campo-cartao"
         onpaste={(evento) => colar(evento, seletorFrente)}
@@ -198,7 +198,7 @@
         id="verso-{original?.id ?? 'novo'}"
         name="verso"
         rows="3"
-        maxlength="2000"
+        maxlength="10000"
         placeholder="A resposta"
         class="entrada campo-cartao"
         onpaste={(evento) => colar(evento, seletorVerso)}

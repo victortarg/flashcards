@@ -1,5 +1,6 @@
 <script>
   import DotsThreeIcon from "phosphor-svelte/lib/DotsThreeIcon";
+  import FileArrowDownIcon from "phosphor-svelte/lib/FileArrowDownIcon";
   import FolderSimpleIcon from "phosphor-svelte/lib/FolderSimpleIcon";
   import PencilSimpleIcon from "phosphor-svelte/lib/PencilSimpleIcon";
   import TrashIcon from "phosphor-svelte/lib/TrashIcon";
@@ -49,6 +50,15 @@
         <button type="button" role="menuitem" class="menu-item" onclick={aoMover}>
           <FolderSimpleIcon size={16} /> Mover para pasta
         </button>
+        <a
+          href="/baralhos/{baralho.id}/exportar"
+          download
+          role="menuitem"
+          class="menu-item"
+          data-sveltekit-preload-data="false"
+        >
+          <FileArrowDownIcon size={16} /> Exportar XML
+        </a>
         <div class="menu-separador"></div>
         <button type="button" role="menuitem" class="menu-item" data-perigo onclick={aoApagar}>
           <TrashIcon size={16} /> Apagar

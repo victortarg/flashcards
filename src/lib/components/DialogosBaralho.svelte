@@ -4,12 +4,13 @@
   import FolderSimpleIcon from "phosphor-svelte/lib/FolderSimpleIcon";
   import HouseIcon from "phosphor-svelte/lib/HouseIcon";
   import Dialogo from "./Dialogo.svelte";
+  import ImportarXml from "./ImportarXml.svelte";
   import SeletorCor from "./SeletorCor.svelte";
   import { corAleatoria } from "#lib/cores.js";
   import { comFeedback } from "#lib/formularios.js";
 
   /** @typedef {{ id: string, title: string, color: string | null, folder_id: string | null, total?: number }} Baralho */
-  /** @typedef {'novo' | 'editar' | 'mover' | 'apagar'} Modo */
+  /** @typedef {'novo' | 'importar' | 'editar' | 'mover' | 'apagar'} Modo */
 
   /** @type {{ pastas: { id: string, name: string }[] }} */
   let { pastas } = $props();
@@ -31,6 +32,11 @@
     idPastaNova = idPasta;
     cor = corAleatoria();
     abrir("novo", null);
+  }
+  /** @param {string | null} [idPasta] */
+  export function importar(idPasta = null) {
+    idPastaNova = idPasta;
+    abrir("importar", null);
   }
   /** @param {Baralho} baralho */
   export function editar(baralho) {
@@ -64,6 +70,7 @@
 
   const titulos = {
     novo: "Novo baralho",
+    importar: "Importar arquivo XML",
     editar: "Editar baralho",
     mover: "Mover para pasta",
     apagar: "Apagar baralho?",
@@ -100,8 +107,20 @@
         <input id="titulo-novo" name="titulo" class="entrada" placeholder="Anatomia, Inglês, Direito Civil…" maxlength="120" required autofocus />
       </div>
       <div class="mt-5"><SeletorCor bind:valor={cor} /></div>
+      <p class="mt-5 text-sm text-texto-2">
+        Já tem os cartões em outro app?
+        <button
+          type="button"
+          class="font-medium text-texto underline decoration-borda-forte underline-offset-4 hover:decoration-texto"
+          onclick={() => (modo = "importar")}
+        >
+          Importar arquivo XML
+        </button>
+      </p>
       {@render botaoEnviar("Criar baralho")}
     </form>
+  {:else if modo === "importar"}
+    <ImportarXml idPasta={idPastaNova} aoConcluir={() => (aberto = false)} aoCancelar={() => (aberto = false)} />
   {:else if modo === "editar" && alvo}
     <form method="POST" action="?/renomearBaralho" use:enhance={feedback("Baralho atualizado.")}>
       <input type="hidden" name="id" value={alvo.id} />

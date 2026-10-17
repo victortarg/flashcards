@@ -2,6 +2,7 @@ import { fail } from "@sveltejs/kit";
 import { acoesBiblioteca, exigirUsuario, texto } from "#lib/server/acoes.js";
 import { buscarBaralho, CAMPOS_CARTAO, garantir } from "#lib/server/dados.js";
 import { apagarImagens, enviarImagem, ErroImagem } from "#lib/server/imagens.js";
+import { LIMITE_TEXTO } from "#lib/xml-cartoes.js";
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ params, locals }) {
@@ -35,8 +36,8 @@ export const actions = {
     const dados = await request.formData();
 
     const id = texto(dados, "id") || null;
-    const frente = texto(dados, "frente", 2000);
-    const verso = texto(dados, "verso", 2000);
+    const frente = texto(dados, "frente", LIMITE_TEXTO);
+    const verso = texto(dados, "verso", LIMITE_TEXTO);
     const arquivoFrente = dados.get("imagem_frente");
     const arquivoVerso = dados.get("imagem_verso");
     const removerFrente = dados.get("remover_imagem_frente") === "1";

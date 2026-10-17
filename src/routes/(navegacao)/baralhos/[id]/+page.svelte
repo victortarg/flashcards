@@ -5,6 +5,7 @@
   import ArrowLeftIcon from "phosphor-svelte/lib/ArrowLeftIcon";
   import CopyIcon from "phosphor-svelte/lib/CopyIcon";
   import DotsThreeIcon from "phosphor-svelte/lib/DotsThreeIcon";
+  import FileArrowDownIcon from "phosphor-svelte/lib/FileArrowDownIcon";
   import FolderSimpleIcon from "phosphor-svelte/lib/FolderSimpleIcon";
   import LinkIcon from "phosphor-svelte/lib/LinkIcon";
   import MagnifyingGlassIcon from "phosphor-svelte/lib/MagnifyingGlassIcon";
@@ -88,6 +89,15 @@
         <button type="button" role="menuitem" class="menu-item" onclick={() => (compartilhando = true)}>
           <ShareNetworkIcon size={16} /> Compartilhar
         </button>
+        <a
+          href="/baralhos/{baralho.id}/exportar"
+          download
+          role="menuitem"
+          class="menu-item"
+          data-sveltekit-preload-data="false"
+        >
+          <FileArrowDownIcon size={16} /> Exportar XML
+        </a>
         <div class="menu-separador"></div>
         <button
           type="button"
